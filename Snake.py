@@ -193,8 +193,9 @@ class Snake:
         self.Head_y = y_pos
         self.Head_width = self.Body_width = width
         self.Head_height = self.Body_height = height
-        self.Head = \
-            pygame.Rect(self.Head_x, self.Head_y, self.Head_width, self.Head_height)
+
+        self.Head = pygame.Rect(self.Head_x, self.Head_y, self.Head_width, self.Head_height)
+
 
     def randomize_location(self, screen: Display, borders: GameBorders):
         self.Head_x = random.randint(borders.Width,
@@ -233,7 +234,7 @@ class Snake:
         return collide_x, collide_y
 
     def check_body_collision(self):
-        for part in snake.Body[2:]:
+        for part in snake.Body[1:]:
             part: SnakeBody
             x_collide, y_collide = self.check_collision(part.Self)
             if x_collide and y_collide:
@@ -287,6 +288,7 @@ class Snake:
                                        self.Speed,
                                        self.Color
                                        )
+            snake_body.Movement = movement
             self.Body.append(snake_body)
             last = self.Body[len(self.Body)-1]
             movement = last.Movement
@@ -296,7 +298,7 @@ class Snake:
             height = last.Height
 
     def move_body(self):
-        next_part = self.Head
+        next_part = self.Head # check where it is after next loop
         for part in self.Body:
             part: SnakeBody
             current_part = part.Self
@@ -500,7 +502,6 @@ while True:
         if Borders.check_collision(snake):
             break
         if snake.check_body_collision():
-            print("collide")
             break
         if Apple.check_collision(snake.Head):
             Apple.randomize_location(Screen, Borders)
@@ -528,7 +529,7 @@ while True:
             Screen.refresh()
             Apple.randomize_location(Screen, Borders)
             snake.Body = []
-            snake.Movement=""
+            snake.Movement= ""
             snake.randomize_location(Screen, Borders)
             Restart = False
             Score = 0
