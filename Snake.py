@@ -1,51 +1,42 @@
-import pygame
 import sys
-import random
-from math import fabs
+from random import randint
+import pygame
+from enum import Enum
+from collections import deque
+from copy import deepcopy
 
 
-class Colors:
-    Black = [0, 0, 0]
-    White = [255, 255, 255]
-    Red = [255, 0, 0]
-    Green = [0, 255, 0]
-    Blue = [0, 0, 255]
-
-    @staticmethod
-    def custom_color(r, g, b):
-        return [r, g, b]
+def is_collision(obj: pygame.Rect, obj1: pygame.Rect):
+    collision_x = True if obj1.x < obj.x < obj1.x + obj1.width or obj1.x < obj.x + obj.width < obj1.x + obj1.width \
+        else False
+    collision_y = True if obj1.y < obj.y < obj1.y + obj1.height or obj1.y < obj.y + obj.height < obj1.y + obj1.height\
+        else False
+    return collision_x and collision_y
 
 
-class Menu:
-    def __init__(self, height, width, color, font, score_coord, game_over_coord):
-        self.height = height
-        self.width = width
-        self.color = color
-        self.font = font
-        self.score_coord = score_coord
-        self.game_over_coord = game_over_coord
-        self.object = pygame.Rect(0, 0, width, height)
+class Colors(Enum):
+    Red = (255, 0, 0)
+    Blue = (0, 0, 255)
+    Green = (0, 255, 0)
+    Black = (0, 0, 0)
+    White = (255, 255, 255)
 
-    def update(self, screen_var, score_var, game_over=False):
-        pygame.draw.rect(screen_var, self.color, self.object)
-        score_text = self.font.render('Score: ' + str(score_var), False, Colors.Red)
-        if game_over:
-            game_over_text = self.font.render("Game over ! Press space to restart", False, Colors.Red)
-            Screen.Screen.blit(game_over_text, self.game_over_coord)
-        Screen.Screen.blit(score_text, self.score_coord)
+
+class Directions(Enum):
+    UP = 1
+    DOWN = 2
+    LEFT = 3
+    RIGHT = 4
+    NONE = 5
 
 
 class Display:
-    Default_resolution = (1280, 720)
-    Resolution = None
-    Screen = None
+    def __init__(self, resolution):
+        self.resolution = resolution
+        self.object = pygame.display.set_mode(resolution)
 
-    def __init__(self, resolution=Default_resolution):
-        self.Resolution = resolution
-        self.Screen = pygame.display.set_mode(resolution)
-
-    def fill(self, color):
-        self.Screen.fill(color)
+    def fill(self, color: Colors):
+        self.object.fill(color.value)
 
     @staticmethod
     def refresh():
@@ -53,388 +44,179 @@ class Display:
 
 
 class GameBorders:
-    Width = 0
-    Color = None
-    Wall_left = None
-    Wall_right = None
-    Wall_up = None
-    Wall_down = None
-    Borders = []
+    def __init__(self, resolution, width, color):
+        self.width = width
+        self.color = color.value
+        self.wall_left = pygame.Rect(0, 0, self.width, resolution[1])
+        self.wall_right = pygame.Rect(resolution[0] - self.width, 0,
+                                      self.width, resolution[1])
+        self.wall_up = pygame.Rect(0, 0, resolution[0], self.width)
+        self.wall_down = pygame.Rect(0, resolution[1] - self.width,
+                                     resolution[0], self.width)
+        self.walls = [self.wall_down, self.wall_right, self.wall_left, self.wall_up]
 
-    def __init__(self, menu_height, screen: Display, width=10, color=None):
-        if color is None:
-            color = Colors.White
-        self.Width = width
-        self.Color = color
-        screen_resolution = screen.Resolution
-        self.Wall_left = pygame.Rect(0, 0, self.Width, screen_resolution[1])
-        self.Wall_right = pygame.Rect(screen_resolution[0] - self.Width, 0,
-                                      self.Width, screen_resolution[1])
-        self.Wall_up = pygame.Rect(0, menu_height, screen_resolution[0], self.Width)
-        self.Wall_down = pygame.Rect(0, screen_resolution[1] - self.Width,
-                                     screen_resolution[0], self.Width)
-        self.Borders = [self.Wall_down, self.Wall_right, self.Wall_left, self.Wall_up]
-
-    def draw(self, screen: Display):
-        pygame.draw.rect(screen.Screen, self.Color, self.Wall_left)
-        pygame.draw.rect(screen.Screen, self.Color, self.Wall_right)
-        pygame.draw.rect(screen.Screen, self.Color, self.Wall_up)
-        pygame.draw.rect(screen.Screen, self.Color, self.Wall_down)
-
-    def check_collision(self, player):
-        for border in self.Borders:
-            x_collision, y_collision = check_collision(player.Head, border)
-            if x_collision and y_collision:
-                return True
-        return False
-
-
-class SnakeBody:
-    # Snake body attributes
-    # Color = []
-    Self = None
-    X = 0
-    Y = 0
-    # Snake move attributes
-    Movement = ""
-    Speed = 0
-    Move_pos = ()
-    Height = None
-    Width = None
-
-    def __init__(self, x, y, height, width, speed, color):
-        self.Width = width
-        self.Height = height
-        self.Speed = speed
-        self.Color = color
-        self.X = x
-        self.Y = y
-        self.Self = pygame.Rect(int(self.X), int(self.Y), self.Width, self.Height)
-
-    def update_location(self):
-        self.Self = pygame.Rect(int(self.X), int(self.Y), self.Width, self.Height)
-
-    def move_to_object(self, obj: pygame.Rect):
-        if self.Move_pos == ():
-            self.Move_pos = obj.x, obj.y
-        if self.X == self.Move_pos[0] and self.Y == self.Move_pos[1]:
-            self.Move_pos = obj.x, obj.y
-        move_x, move_y = self.Move_pos
-        if self.X != move_x:
-            if self.X < move_x:
-                if fabs(self.X - move_x) < self.Speed:
-                    self.X = move_x + (self.Speed - fabs(self.Y - move_y))
-                    self.Move_pos = ()
-                else:
-                    self.X += self.Speed
-                self.Movement = "RIGHT"
-            else:
-                if fabs(self.X - move_x) < self.Speed:
-                    self.X = move_x - (self.Speed - fabs(self.Y - move_y))
-                else:
-                    self.X -= self.Speed
-                self.Movement = "LEFT"
-        else:
-            if self.Y < move_y:
-                if fabs(self.Y - move_y) < self.Speed:
-                    self.Y = move_y + (self.Speed - fabs(self.Y - move_y))
-                    self.Move_pos = ()
-                else:
-                    self.Y += self.Speed
-                self.Movement = "DOWN"
-            else:
-                if fabs(self.Y - move_y) <= self.Speed:
-                    self.Y = move_y - (self.Speed - fabs(self.Y - move_y))
-                    self.Move_pos = ()
-                else:
-                    self.Y -= self.Speed
-                self.Movement = "UP"
-
-        self.update_location()
-
-
-class Snake:
-    # Snake attributes
-    Color = []
-    # Snake move attributes
-    Speed = 0
-    Movement = ""
-    Last_move_pos = ()
-    # Snake head attributes
-    Head = None
-    Head_x = 0
-    Head_y = 0
-    Head_height = None
-    Head_width = None
-
-    # Snake body attributes
-    Body = []
-    Body_height = None
-    Body_width = None
-
-    def __init__(self, x_pos=20, y_pos=20, height=50, width=50, speed=2.0, color=None):
-        if color is None:
-            color = Colors.White
-        self.Color = color
-        self.Speed = speed
-        self.Head_x = x_pos
-        self.Head_y = y_pos
-        self.Head_width = self.Body_width = width
-        self.Head_height = self.Body_height = height
-
-        self.Head = pygame.Rect(self.Head_x, self.Head_y, self.Head_width, self.Head_height)
-
-    def randomize_location(self, screen: Display, borders: GameBorders, var_menu: Menu):
-        self.Head_x = random.randint(borders.Width,
-                                     screen.Resolution[0] - (borders.Width + self.Head_width))
-        self.Head_y = random.randint(Borders.Width + var_menu.height,
-                                     screen.Resolution[1] - (borders.Width + self.Head_height))
-        self.update_head_location()
-
-    def determine_movement(self, events):
-        if (events.key == pygame.K_w or events.key == pygame.K_UP) and not self.Movement == "DOWN":
-            self.Movement = "UP"
-        if (events.key == pygame.K_s or events.key == pygame.K_DOWN) and not self.Movement == "UP":
-            self.Movement = "DOWN"
-        if (events.key == pygame.K_a or events.key == pygame.K_LEFT) and not self.Movement == "RIGHT":
-            self.Movement = "LEFT"
-        if (events.key == pygame.K_d or events.key == pygame.K_RIGHT) and not self.Movement == "LEFT":
-            self.Movement = "RIGHT"
-
-    def cancel_movement(self, events):
-
-        if events.key == pygame.K_SPACE or events.key == pygame.K_w or events.key == pygame.K_UP:
-            self.Movement = "DOWN"
-        if events.key == pygame.K_s or events.key == pygame.K_DOWN:
-            self.Movement = "UP"
-        if events.key == pygame.K_a or events.key == pygame.K_LEFT:
-            self.Movement = "RIGHT"
-        if events.key == pygame.K_d or events.key == pygame.K_RIGHT:
-            self.Movement = "LEFT"
-
-    def update_head_location(self):
-        self.Head = pygame.Rect(int(self.Head_x), int(self.Head_y), self.Head_width,
-                                self.Head_height)
+    def draw(self, g_screen: Display):
+        for wall in self.walls:
+            pygame.draw.rect(g_screen.object, self.color, wall)
 
     def check_collision(self, obj):
-        collide_x, collide_y = check_collision(self.Head, obj)
-        return collide_x, collide_y
-
-    def check_body_collision(self):
-        for part in snake.Body[1:]:
-            part: SnakeBody
-            x_collide, y_collide = self.check_collision(part.Self)
-            if x_collide and y_collide:
+        for wall in self.walls:
+            if is_collision(obj, wall):
                 return True
         return False
+
+
+class GamePart:
+    def __init__(self, size, pos, color: Colors):
+        self.color = color
+        self.object = pygame.Rect(pos[0], pos[1], size[0], size[1])
+
+    def draw(self, g_screen: Display):
+        pygame.draw.rect(g_screen.object, self.color.value, self.object)
+
+    def check_collision(self, obj):
+        return is_collision(obj, self.object)
+
+    def randomize_location(self, resolution, g_borders: GameBorders):
+        x = randint(borders.width,
+                    resolution[0] - (g_borders.width + self.object.height))
+        y = randint(borders.width,
+                    resolution[1] - (g_borders.width + self.object.width))
+        self.object = pygame.Rect(x, y, self.object.width, self.object.height)
+
+
+class SnakePart(GamePart):
+    def __init__(self, speed, size, pos, direction, color):
+        super().__init__(size, pos, color)
+        self.speed = speed
+        self.direction = direction
+        self.lastMoves = deque(maxlen=int(size[0] / speed))
+
+    def move(self):
+        if self.direction == Directions.UP:
+            self.object.y -= self.speed
+        elif self.direction == Directions.DOWN:
+            self.object.y += self.speed
+        elif self.direction == Directions.LEFT:
+            self.object.x -= self.speed
+        elif self.direction == Directions.RIGHT:
+            self.object.x += self.speed
+        self.lastMoves.appendleft(self.direction)
+
+
+class Snake(SnakePart):
+    def __init__(self, speed, size, pos, direction: Directions, color: Colors):
+        super().__init__(speed, size, pos, direction, color)
+        self.body = []
 
     def add_body(self, body_nr):
-        movement = self.Movement
-        x = self.Head_x
-        y = self.Head_y
-        width = self.Head_width
-        height = self.Head_height
-        if len(self.Body) != 0:
-            last = self.Body[len(self.Body)-1]
-            last: SnakeBody
-            movement = last.Movement
-            x = last.X
-            y = last.Y
-            width = last.Width
-            height = last.Height
-        for i in range(body_nr):
-            if movement == "UP":
-                snake_body = SnakeBody(x,
-                                       y + height,
-                                       self.Body_width,
-                                       self.Body_height,
-                                       self.Speed,
-                                       self.Color,
-                                       )
-            elif movement == "DOWN":
-                snake_body = SnakeBody(x,
-                                       y - height,
-                                       self.Body_width,
-                                       self.Body_height,
-                                       self.Speed,
-                                       self.Color
-                                       )
-            elif movement == "LEFT":
-                snake_body = SnakeBody(x + width,
-                                       y,
-                                       self.Body_width,
-                                       self.Body_height,
-                                       self.Speed,
-                                       self.Color
-                                       )
+        last_part = self if len(self.body) == 0 else self.body[-1]
+        for count in range(1, body_nr + 1):
+            if last_part.direction == Directions.LEFT:
+                x = last_part.object.x + last_part.object.width * count
+                y = last_part.object.y
+            elif last_part.direction == Directions.RIGHT:
+                x = last_part.object.x - last_part.object.width * count
+                y = last_part.object.y
+            elif last_part.direction == Directions.UP:
+                x = last_part.object.x
+                y = last_part.object.y + last_part.object.height * count
             else:
-                snake_body = SnakeBody(x - width,
-                                       y,
-                                       self.Body_width,
-                                       self.Body_height,
-                                       self.Speed,
-                                       self.Color
-                                       )
-            snake_body.Movement = movement
-            self.Body.append(snake_body)
-            last = self.Body[len(self.Body)-1]
-            movement = last.Movement
-            x = last.X
-            y = last.Y
-            width = last.Width
-            height = last.Height
+                x = last_part.object.x
+                y = last_part.object.y - last_part.object.height * count
+            newPart = SnakePart(self.speed, (self.object.width, self.object.height),
+                                (x, y), self.direction, self.color)
+            for i in range(int(last_part.object.width / self.speed)):
+                last_part.lastMoves.append(last_part.direction)
+            newPart.lastMoves = deepcopy(last_part.lastMoves)
+            self.body.append(newPart)
+
+    def determine_direction(self, e: pygame.event):
+        if e.key == pygame.K_RIGHT or e.key == pygame.K_d:
+            self.direction = Directions.RIGHT if self.direction != Directions.LEFT else Directions.LEFT
+        elif e.key == pygame.K_LEFT or e.key == pygame.K_a:
+            self.direction = Directions.LEFT if self.direction != Directions.RIGHT else Directions.RIGHT
+        elif e.key == pygame.K_UP or e.key == pygame.K_w:
+            self.direction = Directions.UP if self.direction != Directions.DOWN else Directions.DOWN
+        elif e.key == pygame.K_DOWN or e.key == pygame.K_s:
+            self.direction = Directions.DOWN if self.direction != Directions.UP else Directions.UP
 
     def move_body(self):
-        next_part = self.Head  # check where it is after next loop
-        for part in self.Body:
-            part: SnakeBody
-            current_part = part.Self
-            part.move_to_object(next_part)
-            next_part = current_part
+        if len(self.body) != 0:
+            direction = self.lastMoves.pop() if len(self.lastMoves) != 0 else self.direction
+            for body in self.body:
+                body.direction = direction
+                direction = body.lastMoves.pop() if len(body.lastMoves) != 0 else body.direction
+                body.move()
 
-    def move_head(self):
-        if self.Movement == "UP":
-            self.Head_y -= self.Speed
-        if self.Movement == "DOWN":
-            self.Head_y += self.Speed
-        if self.Movement == "LEFT":
-            self.Head_x -= self.Speed
-        if self.Movement == "RIGHT":
-            self.Head_x += self.Speed
-        self.update_head_location()
-
-    def draw(self, screen: Display):
-        if len(self.Body) != 0:
-            for body_part in self.Body:
-                body_part: SnakeBody
-                pygame.draw.rect(screen.Screen, self.Color, body_part.Self)
-        pygame.draw.rect(screen.Screen, self.Color, snake.Head)
+    def draw(self, g_screen: Display):
+        pygame.draw.rect(g_screen.object, self.color.value, self.object)
+        for body in self.body:
+            if not borders.check_collision(body.object):
+                body.draw(g_screen)
+            else:
+                print ("E")
 
 
-class Apple:
-    color = None
-    x = 0
-    y = 0
-    Height = 0
-    Width = 0
-    Self = None
+SCORE = 0
+DEFAULT_SPEED = 1.0
+DEFAULT_BLOCK_SIZE = (20, 20)
+DEFAULT_BLOCK_POSITION = (0, 0)
+DEFAULT_RESOLUTION = (720, 480)
+DEFAULT_BORDER_WIDTH = 15
 
-    def __init__(self, color=None, x_pos=30, y_pos=30, height=20, width=20):
-        if color is None:
-            color = Colors.Red
-        self.x = x_pos
-        self.y = y_pos
-        self.color = color
-        self.Height = height
-        self.Width = width
-        self.Self = pygame.Rect(self.x, self.y, self.Width, self.Height)
-
-    def update_location(self):
-        self.Self = pygame.Rect(self.x, self.y, self.Width, self.Height)
-
-    def draw(self, screen: Display):
-        pygame.draw.rect(screen.Screen, self.color, self.Self)
-
-    def randomize_location(self, screen: Display, borders: GameBorders, var_menu: Menu):
-        self.x = random.randint(borders.Width,
-                                screen.Resolution[0] - (borders.Width + self.Height))
-        self.y = random.randint(Borders.Width + var_menu.height,
-                                screen.Resolution[1] - (borders.Width + self.Width))
-        self.update_location()
-
-    def check_collision(self, obj):
-        collide_x, collide_y = check_collision(obj, self.Self)
-        return collide_x and collide_y
-
-
-def check_collision(obj: pygame.Rect, obj1: pygame.Rect):
-    collision_in_x = False
-    collision_in_y = False
-    if obj1.x != 0:
-        if obj.x + obj.width > obj1.x and obj.x < obj1.x + obj1.width:
-            collision_in_x = True
-    else:
-        if obj.x < obj1.x + obj1.width:
-            collision_in_x = True
-    if obj1.y != 0:
-        if obj.y + obj.height > obj1.y and obj.y < obj1.y + obj1.height:
-            collision_in_y = True
-    else:
-        if obj.y < obj1.y + obj1.height:
-            collision_in_y = True
-    return collision_in_x, collision_in_y
-
-
-pygame.font.init()
-menu_font = pygame.font.SysFont('Comic Sans MS', 15)
-menu_size = 40
-menu_color = Colors.White
-score_coordinates = (15, 5)
-game_over_coordinates = (90, 5)
-menu = Menu(menu_size, 720, menu_color, menu_font, score_coordinates, game_over_coordinates)
-
-Clock = pygame.time.Clock()
+clock = pygame.time.Clock()
 # Arguments : (Screen_width, Screen height)
-Screen = Display((720, 480))
+screen = Display(DEFAULT_RESOLUTION)
 # Arguments : Screen resolution, wall width, wall, color
-Borders = GameBorders(menu.height, Screen, 15, Colors.White)
-# Arguments : color, x, y, height, width
-Apple = Apple(Colors.Red, 0, 0, 20, 20)
-Apple.randomize_location(Screen, Borders, menu)
-# Arguments : x, y, height, width, speed, color
-snake = Snake(0, 0, 20, 20, 1.0, Colors.Green)
-snake.randomize_location(Screen, Borders, menu)
+borders = GameBorders(screen.resolution, DEFAULT_BORDER_WIDTH, Colors.White)
+# Arguments : size, pos, color
+apple = GamePart(DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_POSITION, Colors.Red)
+apple.randomize_location(screen.resolution, borders)
+# Arguments : speed, size, pos, direction, color
+snake = Snake(DEFAULT_SPEED, DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_POSITION, Directions.NONE, Colors.Green)
+snake.randomize_location(screen.resolution, borders)
+pause = False
 # Game loop
-Score = 0
-Restart = False
 while True:
-    while True:
-        snake.Changed_directions = False
+    while pause:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            # if event.type == pygame.KEYUP:
-            # cancel_movement(event)
             if event.type == pygame.KEYDOWN:
-                snake.determine_movement(event)
-        if Borders.check_collision(snake):
-            break
-        if snake.check_body_collision():
-            break
-        if Apple.check_collision(snake.Head):
-            Apple.randomize_location(Screen, Borders, menu)
-            snake.add_body(3)
-            Score += 1
-            print(Score)
-        snake.move_head()
-        snake.move_body()
-        Screen.fill(Colors.Black)
-        Borders.draw(Screen)
-        menu.update(Screen.Screen, Score)
-        Apple.draw(Screen)
-        snake.draw(Screen)
-        Screen.refresh()
-        Clock.tick(144)
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    Restart = True
-        if Restart:
-            Screen.fill(Colors.Black)
-            Screen.refresh()
-            Apple.randomize_location(Screen, Borders, menu)
-            snake.Body = []
-            snake.Movement = ""
-            snake.randomize_location(Screen, Borders, menu)
-            Restart = False
-            Score = 0
-            break
-        Screen.fill(Colors.Red)
-        menu.update(Screen.Screen, Score, True)
-        Screen.refresh()
-        Clock.tick(144)
+                if event.key == pygame.K_p:
+                    pause = False
+                    break
+        clock.tick(144)
+    for part in snake.body[2:]:
+        if snake.check_collision(part.object):
+            pygame.quit()
+            sys.exit()
+    if borders.check_collision(snake.object):
+        pygame.quit()
+        sys.exit()
+    if apple.check_collision(snake.object):
+        SCORE += 1
+        snake.add_body(3)
+        correct_placement = False
+        while not correct_placement:
+            apple.randomize_location(screen.resolution, borders)
+            for part in snake.body + [snake]:
+                if apple.check_collision(part.object):
+                    break
+            correct_placement = True
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_p:
+                pause = True
+            snake.determine_direction(event)
+    snake.move_body()
+    snake.move()
+
+    screen.fill(Colors.Black)
+    borders.draw(screen)
+    apple.draw(screen)
+    snake.draw(screen)
+    screen.refresh()
+    clock.tick(144)
